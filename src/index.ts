@@ -12,23 +12,24 @@ type Variables = {
 
 const app = new Hono<{ Variables: Variables }>()
 
-// Add middlewares
-app.use('*', rateLimitMiddleware)
+// Add middlewares  
 app.use('*', pinoLogger({
   pino: pino({
     level: 'info',
-    transport: {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        ignore: 'pid,hostname',
-        translateTime: 'SYS:standard'
+    ...(process.env.NODE_ENV !== 'production' && {
+      transport: {
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          ignore: 'pid,hostname',
+          translateTime: 'SYS:standard'
+        }
       }
-    }
+    })
   })
 }))
 
-
+app.use('*', rateLimitMiddleware)
 
 app.get('/', (c) => {
   return c.text('Külot! 🩲')

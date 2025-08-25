@@ -30,10 +30,18 @@ urlSummaryRoute.post('/url-summary',
   async (c) => {
     const { url } = c.req.valid('json')
     const { logger } = c.var
+    
+    logger.info({ requestBody: { url } }, 'Processing URL summary request')
+    
     const scrapeResult = await scrapeUrlToMarkdown(url)    
 
     logger.info({ url }, 'Starting Claude CLI for URL bookmark summary')
-    logger.info({ scrapeResult }, 'Scrape result')
+    logger.info({ 
+      title: scrapeResult.metadata.title,
+      siteName: scrapeResult.metadata.siteName,
+      description: scrapeResult.metadata.description,
+      contentLength: scrapeResult.content.length
+    }, 'Scrape result')
 
     // Trim content to reasonable length for Claude processing (8000 chars ~2000 tokens)
     const maxContentLength = 8000
@@ -70,11 +78,13 @@ If it is a youtube or similar site video use the template <example>[YouTube(or s
       })
       
       const executionTime = Date.now() - startTime
+      const generatedSummary = stdout.trim()
+      
       logger.info({ 
         executionTime, 
         outputLength: stdout.length,
-        outputPreview: stdout.substring(0, 150)
-      }, 'Claude CLI completed successfully')
+        generatedSummary
+      }, 'Claude CLI completed successfully - Generated summary')
       
       return c.text(stdout)
     } catch (error: any) {
