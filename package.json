@@ -12,7 +12,7 @@
     "@mozilla/readability": "^0.6.0",
     "execa": "^9.6.0",
     "hono": "^4.8.10",
-    "hono-pino-logger": "^1.0.0",
+    "hono-pino": "^0.10.2",
     "hono-rate-limiter": "^0.4.2",
     "pino": "^9.8.0",
     "pino-pretty": "^13.1.1",

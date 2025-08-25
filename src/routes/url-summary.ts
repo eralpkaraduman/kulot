@@ -3,11 +3,11 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { execa } from 'execa'
 import { authMiddleware } from '../middlewares/auth.js'
-import { appLogger } from '../utils/logger.js'
 import { scrapeUrlToMarkdown } from '../utils/scraper.js'
+import type { PinoLogger } from 'hono-pino'
 
 type Variables = {
-  requestId: string
+  logger: PinoLogger
 }
 
 export const urlSummaryRoute = new Hono<{ Variables: Variables }>()
@@ -29,11 +29,11 @@ urlSummaryRoute.post('/url-summary',
   })),
   async (c) => {
     const { url } = c.req.valid('json')
-    const requestId = c.get('requestId')
+    const { logger } = c.var
     const scrapeResult = await scrapeUrlToMarkdown(url)    
 
-    appLogger.info({ requestId, url }, 'Starting Claude CLI for URL bookmark summary')
-    appLogger.info({ requestId, scrapeResult }, 'Scrape result')
+    logger.info({ url }, 'Starting Claude CLI for URL bookmark summary')
+    logger.info({ scrapeResult }, 'Scrape result')
 
     // Trim content to reasonable length for Claude processing (8000 chars ~2000 tokens)
     const maxContentLength = 8000
@@ -56,7 +56,7 @@ If it is a youtube or similar site video use the template <example>[YouTube(or s
 <content-markdown>${trimmedContent}</content-markdown>
 `
     
-    appLogger.info({ requestId, promptLength: prompt.length }, 'Executing Claude CLI command');
+    logger.info({ promptLength: prompt.length }, 'Executing Claude CLI command');
     
     try {
       const startTime = Date.now()
@@ -70,8 +70,7 @@ If it is a youtube or similar site video use the template <example>[YouTube(or s
       })
       
       const executionTime = Date.now() - startTime
-      appLogger.info({ 
-        requestId, 
+      logger.info({ 
         executionTime, 
         outputLength: stdout.length,
         outputPreview: stdout.substring(0, 150)
@@ -82,8 +81,7 @@ If it is a youtube or similar site video use the template <example>[YouTube(or s
       const stderr = error.stderr || ''
       const errorMessage = stderr || error.message || String(error)
       
-      appLogger.error({ 
-        requestId, 
+      logger.error({ 
         error: errorMessage, 
         stderr: stderr ? stderr.substring(0, 200) : undefined 
       }, 'Claude CLI execution failed')
