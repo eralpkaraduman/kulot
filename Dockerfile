@@ -1,8 +1,32 @@
-# Use Node.js 20.13 base image (x86_64 for reliable Chrome/Playwright support)
-ARG TARGETPLATFORM=linux/amd64
-FROM --platform=$TARGETPLATFORM node:20.13-bookworm
+# Build stage
+FROM node:20.13-bookworm AS builder
 
-# Install system dependencies for Claude Code and Playwright
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy package files first (for better caching)
+COPY package*.json tsconfig.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY src/ ./src/
+
+# Build the application
+RUN npm run build
+
+# Runtime stage
+ARG TARGETPLATFORM=linux/amd64
+FROM --platform=$TARGETPLATFORM node:20.13-bookworm AS runtime
+
+# Install runtime dependencies and setup system
 RUN apt-get update && apt-get install -y \
     curl \
     wget \
@@ -10,8 +34,6 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     git \
     python3 \
-    python3-pip \
-    build-essential \
     libnss3-dev \
     libatk-bridge2.0-dev \
     libdrm2 \
@@ -26,69 +48,49 @@ RUN apt-get update && apt-get install -y \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Set timezone to Europe/Helsinki
+# Set timezone
 ENV TZ=Europe/Helsinki
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Set working directory
+# Create user and setup permissions
+RUN groupadd -r kulot && \
+    useradd -r -g kulot -m kulot && \
+    usermod -aG sudo kulot && \
+    echo 'kulot ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && \
+    mkdir -p /home/kulot/.npm /home/kulot/.npm-global /home/kulot/.claude && \
+    chown -R kulot:kulot /home/kulot
+
 WORKDIR /app
 
-# Copy package files first (for better caching)
-COPY package*.json tsconfig.json ./
+# Copy built application from builder stage
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package*.json ./
 
-# Install Node.js dependencies
-RUN npm ci
+# Install only production dependencies
+RUN npm ci --only=production
 
-# Copy application source
-COPY src/ ./src/
-COPY .env ./
+# Install global tools as root
+RUN npm install -g @anthropic-ai/claude-code @playwright/mcp@latest
 
-# Build the application
-RUN npm run build
-
-# Create non-root user with home directory and sudo access
-RUN groupadd -r kulot && useradd -r -g kulot -m kulot
-RUN usermod -aG sudo kulot
-RUN echo 'kulot ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
-RUN chown -R kulot:kulot /app
-
-# Create npm directories with proper permissions
-RUN mkdir -p /home/kulot/.npm /home/kulot/.npm-global && chown -R kulot:kulot /home/kulot
-
-# Switch to non-root user
+# Setup user environment
 USER kulot
+RUN npx playwright install chromium && \
+    npm config set prefix '/home/kulot/.npm-global' && \
+    echo '{}' > /home/kulot/.claude/claude.json && \
+    ln -sf /home/kulot/.claude/claude.json /home/kulot/.claude.json
 
-# Install Claude Code CLI globally (system-wide) as root before switching users
-USER root
-RUN npm install -g @anthropic-ai/claude-code
-RUN npm install -g @playwright/mcp@latest
-
-# Switch to kulot user before installing browsers
-USER kulot
-
-# Install Playwright browsers for kulot user
-RUN npx playwright install chromium
-RUN ls -la /home/kulot/.cache/ms-playwright/
-
-# Configure npm to use local prefix for user installs
-RUN npm config set prefix '/home/kulot/.npm-global'
+# Set environment variables
 ENV PATH="/home/kulot/.npm-global/bin:/usr/local/bin:$PATH"
 ENV npm_config_prefix="/home/kulot/.npm-global"
 
-# Create initial claude.json with MCP configuration in volume directory
-RUN mkdir -p /home/kulot/.claude && chown kulot:kulot /home/kulot/.claude
-RUN echo '{}' > /home/kulot/.claude/claude.json
-RUN chown kulot:kulot /home/kulot/.claude/claude.json
+# Change ownership of app directory
+USER root
+RUN chown -R kulot:kulot /app
+USER kulot
 
-# Create symlink from home directory to volume directory
-RUN ln -sf /home/kulot/.claude/claude.json /home/kulot/.claude.json
-
-# Expose port
 EXPOSE 3000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:3000/ || exit 1
 
-# Start the application
 CMD ["npm", "run", "start"]
