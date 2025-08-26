@@ -6,7 +6,7 @@ export const appLogger = pino({
     target: 'pino-pretty',
     options: {
       colorize: true,
-      ignore: 'pid,hostname',
+      ignore: 'pid',
       translateTime: 'SYS:standard'
     }
   }
