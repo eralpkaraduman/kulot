@@ -76,7 +76,7 @@ The service includes a health check that:
 ### Example summarization api
 
 ```bash
-http POST localhost:3000/url-summary Authorization:"Bearer your_api_key_here" url="https://example.com"
+http POST localhost:3000/api/url-summary Authorization:"Bearer your_api_key_here" url="https://example.com"
 ```
 
 will return  

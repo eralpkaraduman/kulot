@@ -2,30 +2,25 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { urlSummaryRoute } from './routes/url-summary.js'
 import { rateLimitMiddleware } from './middlewares/rate-limit.js'
+import { authMiddleware } from './middlewares/auth.js'
 import { pinoLogger } from 'hono-pino'
-import type { PinoLogger } from 'hono-pino'
 import pino from 'pino'
 
-type Variables = {
-  logger: PinoLogger
-}
+const app = new Hono()
 
-const app = new Hono<{ Variables: Variables }>()
-
-// Add middlewares  
 app.use('*', pinoLogger({
-  pino: pino({
-    level: 'info',
-    ...(process.env.NODE_ENV !== 'production' && {
-      transport: {
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          ignore: 'pid,hostname',
-          translateTime: 'SYS:standard'
-        }
+  pino: pino(process.env.NODE_ENV !== 'production' ? {
+    level: 'debug',
+    transport: {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'SYS:standard',
+        ignore: 'pid,hostname'
       }
-    })
+    }
+  } : {
+    level: 'info'
   })
 }))
 
@@ -35,8 +30,10 @@ app.get('/', (c) => {
   return c.text('Külot! 🩲')
 })
 
-// Mount the URL summary routes
-app.route('/', urlSummaryRoute)
+const apiRouter = new Hono()
+apiRouter.use('*', authMiddleware)
+apiRouter.route('/', urlSummaryRoute)
+app.route('/api', apiRouter)
 
 serve({
   fetch: app.fetch,

@@ -2,18 +2,11 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { execa } from 'execa'
-import { authMiddleware } from '../middlewares/auth.js'
 import { scrapeUrlToMarkdown } from '../utils/scraper.js'
-import type { PinoLogger } from 'hono-pino'
 
-type Variables = {
-  logger: PinoLogger
-}
-
-export const urlSummaryRoute = new Hono<{ Variables: Variables }>()
+export const urlSummaryRoute = new Hono()
 
 urlSummaryRoute.post('/url-summary',
-  authMiddleware,
   zValidator('json', z.object({
     url: z.string().min(1, "URL is required").refine(
       (val) => {
