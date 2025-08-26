@@ -10,7 +10,7 @@ services:
       - claude-session:/home/kulot/.claude
     environment:
       - NODE_ENV=production
-      - API_KEY=${API_KEY:-your_api_key_here}
+      - API_KEY=your_api_key_here
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/"]
